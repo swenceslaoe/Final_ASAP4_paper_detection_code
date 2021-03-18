@@ -5,7 +5,7 @@ function[ratio_thresh,FN,TP,FP,mean_boot,std_boot,S_mean,signal_likelihood_std,s
                 S_mean = log(prod(normcdf(template_mean, template_mean, signal_std))) - log(prod(1-temp)); % The ratio value you get if the template detects itself. Taken to be the mean of the 
                 % Signal distribution in ratio space. Probability that the template is a signal when it encounters itself             
 
-                temp = normcdf(B_vec, mean(base(:,tr)), Noise_std);
+                temp = normcdf(B_vec, mean(base(:,tr)), Noise_std); % The integral if the noise detects itself
                 B_mean = log(prod(normcdf(B_vec, template_mean, signal_std))) - log(prod(1-temp));
                 
                 if updown==0 % If the event we are trying to detect goes negative relative to baseline
@@ -198,7 +198,7 @@ end
             
             % Find threshold where FNR = FPR
        if isstr(desired_FP)==1
-            % WARNING: IF D' IS REALLY HIGH, SOMETIMES THE FZERO FUNCTION
+            % WARNING: IF d' IS REALLY HIGH, SOMETIMES THE FZERO FUNCTION
             % BELOW GIVES STRANGE NUMBERS FOR RATIO THRESH.
             ratio_thresh = fzero(@(x) signal_dist(x) - noise_dist(x), mean([B_mean,S_mean])); % Finds the 
             % point where the two distributions meet, optimizing the

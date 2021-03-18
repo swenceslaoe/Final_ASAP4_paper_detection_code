@@ -1,7 +1,7 @@
 function[spikes_struct,whole_spike,Spike_Stack_norm,spikes,ratio_range,ratio_PDF,PDF] = get_spike_info(data,smooth_wave,ff,fflow,fF,ratio,fs,pre_spike,post_spike,spike_peaks,raw_peaks,spike_peaks_filt,W,section,updown,spikes_struct,tr,varargin);
 
 nyquist_freq = fs/2;             % Nyquist frequency
-cutoff_freqs = [4 11]; % Pull out theta band
+cutoff_freqs = [5 11]; % Pull out theta band
 Wn=cutoff_freqs/nyquist_freq;    % non-dimensional frequency
 order = 1;
 [filtb,filta]=butter(order,Wn,'bandpass'); % construct the filter
@@ -65,29 +65,45 @@ AP_height_norm = []; % Taken by finding max of raw data in section where spike i
                 amp_base = [];
                 amp_peak = []; 
                 delta_theta = [];
+                
+                if length(spike_peaks_filt)>length(raw_peaks) % Sometimes a bug creeps in, likely
+                    % because of cutting off the vector, where the filtered
+                    % and the raw vector have different numbers of peaks.
+                    spike_peaks_filt = spike_peaks_filt(1:length(raw_peaks));
+                end
 
                  for s = 1:length(spike_peaks_filt)                               % For each discovered spike
-                    if spike_peaks(s)>W(end) && spike_peaks(s)<length(ff)+W(1) % Don't include weirdness at the start and end of the filtered trace                        
+
+                     if spike_peaks(s)>W(end) && spike_peaks(s)<length(ff)+W(1) % Don't include weirdness at the start and end of the filtered trace                        
                         peri(s,:) = spike_peaks(s) + W;                          % Grab points around spike peak
                         spikes(s,:) = fF(peri(s,:),tr);                        % Store the perispike filtered trace                        
+
                         peri_raw(s,:) = raw_peaks(s) + W;
                         raw_spikes(s,:) = data(peri_raw(s,:),tr);
-                        
+
                         waveform(s,:) = raw_peaks(s) + whole_spike;
                         ratio_waveform(s,:) = spike_peaks(s) + whole_spike;
-                        
+                        s
+                        % Pull out spike waveforms from raw vec
                         if waveform(s,end)>length(raw_norm) % If the waveform goes over the edge of the vector
                             new_temp = raw_norm(waveform(s,1):end)';new_temp2 = ones((waveform(s,end)-length(raw_norm)),1)';                            
                             Spike_Stack_norm(s,:) = [new_temp new_temp2]; 
                             new_temp = data(waveform(s,1):end,tr)';new_temp2 = ones((waveform(s,end)-length(raw_norm)),1)';
-                            Spike_Stack_original(s,:) = [new_temp new_temp2];                             
-                            new_temp = ratio(waveform(s,1):end)';new_temp2 = ones((waveform(s,end)-length(ratio)),1)'; 
-                            ratio_spikes(s,:) = [new_temp new_temp2];                             
+                            Spike_Stack_original(s,:) = [new_temp new_temp2];                                                        
                             
                         else Spike_Stack_norm(s,:) = raw_norm(waveform(s,:))./mean(raw_norm(waveform(s,1))); 
                             Spike_Stack_original(s,:) = data(waveform(s,:),tr);  
+                        end
+                        
+                        % Pull out spike waveforms from ratio vec
+                        if waveform(s,end)>length(ratio) % If the waveform goes over the edge of the ratio vector
+                            
+                            new_temp = ratio(waveform(s,1):end)';new_temp2 = ones((waveform(s,end)-length(ratio)),1)'; 
+                            ratio_spikes(s,:) = [new_temp new_temp2];                             
+                            
+                        else 
                             ratio_spikes(s,:) = ratio(ratio_waveform(s,:),tr);
-                        end                        
+                        end
                         
                             waveform_filt(s,:) = spike_peaks_filt(s) + whole_spike;
                             

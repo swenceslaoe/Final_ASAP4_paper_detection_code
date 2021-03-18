@@ -25,7 +25,7 @@ function[spike_peaks_filt,raw_peaks,spike_peaks,section,closest_to_start] = find
                     % Not great because it will vary dramatically depending
                     % on how the threshold is set.
                     not_zero = find(logical_above_thresh~=0); % Gives indices for Nonzero Elements
-                    if isempty(not_zero)==0
+                    if isempty(not_zero)==0 % If there are some inds
                         start_inds_above_thresh = unique([not_zero(1);not_zero(diff([0;not_zero])>1)]); % Segment Start Indices
                     else start_inds_above_thresh = [];
                     end
@@ -41,7 +41,7 @@ function[spike_peaks_filt,raw_peaks,spike_peaks,section,closest_to_start] = find
 
                             while logical_above_thresh(on_deck+counter)==1
                                 counter = counter+1;
-                                if on_deck+counter>=length(logical_above_thresh);
+                                if on_deck+counter>length(logical_above_thresh);
                                     break;
                                 end % get out of the while loop. logical
                                 % above_thresh ends on a 1.
@@ -76,7 +76,7 @@ function[spike_peaks_filt,raw_peaks,spike_peaks,section,closest_to_start] = find
                       locs = [];
                       spike_count_raw = 0;
                       spike_count_filt = 0;
-                      search_width = 15; % Smaller = search a wider area for peak
+                      search_width = fs/2; % Smaller = search a wider area for peak. This currently corresponds to a search area of 2 data points +/- from the peak.
                       
                      for j = 1:length(spike_peaks) % 1 loop for each spike. Peak in trace isn't always the same
                          % as the peak in ratio, sometimes off by a few
@@ -90,10 +90,10 @@ function[spike_peaks_filt,raw_peaks,spike_peaks,section,closest_to_start] = find
                             [raw_pks(j), raw_locs(j)] = min(on_deck);
                         end
                         raw_peaks_temp = spike_peaks(j)-(round(fs/search_width)+1)+raw_locs(j);
-                        if raw_peaks_temp-pre_spike>0
+
                             spike_count_raw = spike_count_raw+1;
                             raw_peaks(spike_count_raw) = raw_peaks_temp;                       
-                        end
+
                         
                         on_deck_filt = smooth_wave(spike_peaks(j)-round(fs/search_width):spike_peaks(j)+round(fs/search_width),tr);
                         if updown==1
@@ -110,3 +110,15 @@ function[spike_peaks_filt,raw_peaks,spike_peaks,section,closest_to_start] = find
                         
                      end % end for j loop
                 end % end for if we found spikes
+                
+                raw_peaks_temp = raw_peaks - pre_spike; raw_peaks_temp = raw_peaks_temp>0;
+                spike_peaks_filt_temp = spike_peaks_filt - pre_spike;spike_peaks_filt_temp = spike_peaks_filt_temp>0;
+                    spike_peaks_filt = spike_peaks_filt(spike_peaks_filt_temp);
+                    raw_peaks = raw_peaks(raw_peaks_temp);
+                
+                if sum(spike_peaks_filt_temp)>sum(raw_peaks_temp) % Sometimes a bug creeps in, likely
+                    % because of cutting off the vector, where the filtered
+                    % and the raw vector have different numbers of peaks.
+                    spike_peaks_filt = spike_peaks_filt(raw_peaks_temp);
+                    raw_peaks = raw_peaks(raw_peaks_temp);
+                end

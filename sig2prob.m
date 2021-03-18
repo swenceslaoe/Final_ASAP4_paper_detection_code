@@ -31,20 +31,27 @@ function[ratio] = sig2prob(template,data,fF,base,Noise_std,W,tr)
 WaitMessage = parfor_wait(size(data,1)-size(template,2), 'Waitbar', true); 
 
 % BELOW t LOOP CAN RUN AS A PARFOR OR FOR LOOP
-parfor t = 1:size(data,1)-size(template,2) % For each time-point. Convolve template with data.                                       
-                
+parfor t = 1:size(data,1)-size(template,2) % For each time-point. Convolve template with data.                                                       
+    num_digits = 10000;  %number of digits you want to see the result to
 x = t + (0:size(template,2)-1); % Inds to grab time points for comparison.                                   
                     template_mean = mean(template,1); % The signal Means
                     % KEY MOVE: Scale template relative to background.
 
-                    template_mean = (template_mean+base(t,tr))-template_mean(1); % Center template at background                 
+                    %template_mean = (template_mean+base(t,tr))-template_mean(1); % Center template at background                 
+                    % Only need this line if template is floating on the
+                    % background. We have it always set to 1 now
+              
                     
                     if size(template,1)<10 % 10 chosen arbitrarily. If number of templates is low, signal_std is artificially low and it screws up detection.
                         signal_std = Noise_std*ones(1,length(template));
-                    else signal_std = std(template*base(1000,tr));
+                    end
+                    if length(data)>999
+                        signal_std = std(template*base(1000,tr));
+                    else
+                        signal_std = std(template*base(length(data),tr));
                     end
                     % Fix issue where parts of template have no std because
-                    % of the way they were normalized. 1000 was chosen
+                    % of the way they were normalized. 100 was chosen
                     % arbitrarily though! Might need to fix that.
                     low_std_inds = signal_std<(Noise_std)/100;
                     if sum(low_std_inds)>0 % If there are unrealistically low variance portions of the template                       
@@ -65,47 +72,65 @@ x = t + (0:size(template,2)-1); % Inds to grab time points for comparison.
                     % integrates from -Inf to data point. Noise integrates
                     % from data point to Inf.
                     signal_temp_temp = normcdf(fF(x(dip),tr)', template_mean(dip), signal_std(dip)); % Chance it was a signal
-                    % Integrates fF(x(dip),tr) from template(dip) to Inf.
-                    signal_temp_temp = sym(signal_temp_temp);
-                    signal_temp_temp = double(signal_temp_temp); % Sometimes MATLAB
-                            % Rounds numbers close to 1 during this
-                            % process, which will only pop up after the
-                            % fancy integrals happen, thus creating a 0 and
-                            % and Inf in ratio. This catches it early.
+                    % Integrates distribution with mean template_mean(dip) and signal_std(dip)) from -Inf to fF(x(dip),tr).
 
                     signal_temp = prod(signal_temp_temp);
                     
-                    noise_temp_temp = normcdf(fF(x(dip),tr), base(x(dip),tr), Noise_std); % Chance it was noise
-                    % Integrates fF(x(dip),tr) from base(x(dip),tr) to Inf.
-                    noise_temp_temp = sym(noise_temp_temp);
-                    noise_temp_temp = double(noise_temp_temp); % For same reason as above.
+                            if signal_temp==0
+                                signal_temp_tempp = sym(signal_temp_temp);
+                                tempdigits = vpa(signal_temp_tempp, num_digits);
+                                signal_temp = prod(tempdigits);
+                            end
                     
-                    noise_temp = prod(1-noise_temp_temp); % Flip the above numbers
+                    noise_temp_temp = normcdf(fF(x(dip),tr), base(x(dip),tr), Noise_std); % Chance it was noise
+                    % Integrates distribution with mean base(x(dip),tr) and Noise_std from -Inf to fF(x(dip),tr).
+                    
+                    noise_temp = prod(1-noise_temp_temp); % Flip the above numbers. Now the integration is:
+                    % From integrating the distribution with mean base(x(dip),tr) and Noise_std from fF(x(dip),tr) to Inf.
+                    
+                            if noise_temp==0
+                                noise_temp_tempp = sym(noise_temp_temp);
+                                tempdigits = vpa(noise_temp_tempp, num_digits);
+                                noise_temp = prod(1-tempdigits);
+                            end
                     
                     % For parts where template is below baseline - template
                     % integrates from data point to Inf. Noise integrates
                     % from -Inf to data point.
-                    dipdown = logical(abs(dip-1));
+                    dipdown = logical(abs(dip-1)); % All the spots where template is below base.
                     if sum(dipdown)>0 % If it dips
                             signal_temp_temp2 = normcdf(fF(x(dipdown),tr)', template_mean(dipdown), signal_std(dipdown)); % Chance it was a signal
-                            % For when template less than baseline
-                            signal_temp_temp2 = sym(signal_temp_temp2);
-                            signal_temp_temp2 = double(signal_temp_temp2); % Sometimes MATLAB
+                            % For when template less than baseline.
+                            % Integrates distribution with mean template_mean(dipdown) and signal_std(dip)) from -Inf to fF(x(dip),tr).
+                            
+                            % Sometimes MATLAB
                             % Rounds numbers close to 1 during this
                             % process, which will only pop up after the
                             % fancy integrals happen, thus creating a 0 and
                             % and Inf in ratio. This catches it early.
                             signal_temp2 = prod(1-signal_temp_temp2);
+                            % Flip it, such that you have integrated from
+                            % fF(x(dipdown),tr)' to Inf.
 
+                            if signal_temp2==0
+                                signal_temp_tempp2 = sym(signal_temp_temp2);
+                                tempdigits = vpa(signal_temp_tempp2, num_digits);
+                                signal_temp2 = prod(1-tempdigits);
+                            end
+                            
                             noise_temp_temp2 = normcdf(fF(x(dipdown),tr), base(x(dipdown),tr), Noise_std); % Chance it was noise
                             % Don't need to flip it because this is for if the
                             % template dips below baseline, so everything is
                             % flipped.
-                            noise_temp_temp2 = sym(noise_temp_temp2);
-                            noise_temp_temp2 = double(noise_temp_temp2); % For same reason as above.
-                        % section in case zeros are popping up, to get rid of infinities.
 
+                        % section in case zeros are popping up, to get rid of infinities.
                             noise_temp2 = prod(noise_temp_temp2);
+                            
+                            if noise_temp2==0
+                                noise_temp_tempp2 = sym(noise_temp_temp2);
+                                tempdigits = vpa(noise_temp_tempp2, num_digits);
+                                noise_temp2 = prod(tempdigits);
+                            end
                     
                     else signal_temp2 = 1;noise_temp2 = 1; % If it doesn't dip
                     end
@@ -181,19 +206,35 @@ x = t + (0:size(template,2)-1); % Inds to grab time points for comparison.
                             end % end for if sum(zero_inds)>0 statement  
                             
                         end
-%%
                         
                     signal_prob(t) = signal_temp*signal_temp2;
                     noise_prob(t) = noise_temp*noise_temp2;
-
+                    
+                    if signal_prob(t)==0
+                        signal_prob = sym(signal_prob);
+                        signal_temp = sym(signal_temp);
+                        signal_temp2 = sym(signal_temp2);
+                        signal_temp = vpa(signal_temp, num_digits);
+                        signal_temp2 = vpa(signal_temp2, num_digits);
+                        signal_prob(t) = signal_temp*signal_temp2;
+                    end
+                    
+                    if noise_prob(t)==0
+                        noise_prob = sym(noise_prob);
+                        noise_temp = sym(noise_temp);
+                        noise_temp2 = sym(noise_temp2);
+                        noise_temp = vpa(noise_temp, num_digits);
+                        noise_temp2 = vpa(noise_temp2, num_digits);
+                        noise_prob(t) = noise_temp*noise_temp2;
+                    end
+                    
                     ratio(t) = double(log(signal_prob(t)) - log(noise_prob(t))); % Take log of ratio of gaussian probabilities.                  
                     % Log(A/B) = Log(A) - Log(B). Wrote Log ratio as subtraction in case MATLAB
-                    % has issues with really large numbers when division occurs.
+                    % has issues with really large numbers when division occurs.                                                         
                     
-                                      
-                
             WaitMessage.Send; 
+            
 end % end for t loop
 
-ratio = circshift(ratio,-W(1));
+ratio = circshift(ratio,-W(1)); % Shifts it by half the length of the template
 % Shift it backwards to correct for convolution induced shift. 

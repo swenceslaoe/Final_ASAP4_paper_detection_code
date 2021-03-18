@@ -1,4 +1,4 @@
-function[spikes_struct] = detect_spikes(template,data,desired_FP,pre_spike,post_spike,cutoff,fs,varargin);
+function[spikes_struct] = detect_events(template,data,desired_FP,pre_spike,post_spike,cutoff,fs,varargin);
 
 % Varargin ?ratio_thresh? is the threshold for the probability vector, over
 % which it is a spike, under which it is not. If nothing is entered, the
@@ -49,17 +49,20 @@ function[spikes_struct] = detect_spikes(template,data,desired_FP,pre_spike,post_
 
 % varargin:
 % 'Fpass' - For filtering the data with a 2'nd order butterworth, it sets
-% the frequency cutoff for detection. The data itself is high pass filtered
+% the frequency cutoff for detection. The data itself is high or low pass filtered
 % at that frequency. If nothing is input, the default is 20.
+
+% Input 'low' if you want to lowpass at Fpass. Default is highpass.
 
 % 'No_Filt' - means the user already applied their own filtering, or otherwise 
 % does not want the data being input to be further filtered.
 
+% 'nobase' - means the user wants to assume the data has already been
+% normalized to 1. Note that if you use this you can still apply a separate
+% filter to the data in the code
+
 % The output: spikes_struct is a structure with all relevant detection information
 % and spikes. 
-
-
-
 
 % GENERAL USAGE ADVICE:  
 
@@ -85,7 +88,9 @@ function[spikes_struct] = detect_spikes(template,data,desired_FP,pre_spike,post_
 % 5) This program is conservative in that it scrambles the data and assumes
 % it is all noise to estimate the statistics. This is fine for sparse
 % spiking, but if spiking is very rapid it will be more conservative and
-% the actual FP rate will be lower than the one you select.
+% the actual FP rate will be lower than the one you select. THIS IS NO
+% LONGER TRUE, I FIXED IT USING MIXED GAUSSIANS OR FLIPPY METHOD. MORE
+% REALISTIC AND LESS CONSERVATIVE NOW
 
 % Note that if your data is too noisy, it
 % may be the case that your desired FP rate means no spikes were detected.
@@ -146,25 +151,28 @@ digits = 2000; % Increase numerical resolution for integrals later
 
 %% Set parameters
 
-[smooth_wave,data,fF,fflow_all,Flowpass,ASAPtime,base,Noise_std_all,B_vec] = filter_for_detection(data,template,fs,cutoff,varargin); % Does the filtering
-    
 mean_template = mean(template);
 [~,I] = max(abs(mean_template(1)-mean_template)); % Get ind for where peak of template is centered. Finds the high/low point on the template.
 W = 1:size(template,2);W = W-I; % Peri spike window in sample points
 spikes_struct = [];
 
 if mean_template(I)<mean_template(1);updown = 0;else updown = 1;end % figure out which way the template is going.
+% 1 means it is going up with the event in question
+
+[smooth_wave,data,fF,fflow_all,Flowpass,ASAPtime,base,Noise_std_all,B_vec] = filter_for_detection(data,template,fs,cutoff,updown,varargin); % Does the filtering
 
     for tr = 1:size(data,2)                                                % For each trial
-
             ff = fF(:,tr);                                              % Pull filtered fluorescence trace                
             fflow = fflow_all(:,tr);
             Noise_std = Noise_std_all(tr);
             template_mean = mean(template,1); % The signal Means
             
-            if size(template,1)>2 
-                signal_std = std(template*base(1000,tr));       
-            else signal_std = std(fF(:,tr))*ones(1,length(template));
+            % Create signal std
+            if size(template,1)>9 
+                signal_std = std(template*base((round(cutoff*fs))+1,tr));  % Scale template to wherever the base is, then take the std at that point. Should be 1 so this effectively does nothing.
+            end
+            if size(template,1)<10 % Too few templates, assume the templates have the same std as the noise
+                signal_std = std(fF(:,tr))*ones(1,length(template));
             end
             
 ratio(:,tr) = sig2prob(template,data,fF,base,Noise_std,W,tr); % Convolve the template with the filtered data              
